@@ -5,6 +5,9 @@ import numpy as np
 from imutils import perspective
 from matplotlib import pyplot as plt
 
+import rerun as rr
+
+
 COLORS = {
     "blue": [(0, 0, 104), (0, 255, 0), (151, 151, 255)],
     "green": [(0, 104, 0), (0, 255, 0), (151, 202, 151)],
@@ -30,15 +33,19 @@ def _eq(rgb_img: np.ndarray, verbose: bool = False):
     return img
 
 
+def _preprocess(bgr_img: np.ndarray, eq: bool = False, verbose: bool = False):
+    rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+    rgb_img = imutils.resize(rgb_img, width=240)
+    if eq:
+        rgb_img = _eq(rgb_img)
+    return rgb_img
+
+
 def _load_image(
     path: pathlib.Path, eq: bool = False, verbose: bool = False
 ) -> np.ndarray:
     img = cv2.imread(path)
-    img = imutils.resize(img, width=240)
-    if eq:
-        img = _eq(img)
-    else:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = _preprocess(img, eq=eq, verbose=verbose)
     if verbose:
         plt.figure()
         plt.imshow(img)
@@ -54,23 +61,34 @@ def _load_image(
         plt.tight_layout()
     return img
 
+def _morph(stuff: np.ndarray):
+    kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+    kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    morph = cv2.morphologyEx(
+        stuff, cv2.MORPH_OPEN, kernel_sml, iterations=4
+    )
+    morph = cv2.morphologyEx(
+        morph, cv2.MORPH_OPEN, kernel_sml, iterations=2
+    )
+    morph = cv2.morphologyEx(
+        morph, cv2.MORPH_OPEN, kernel_big, iterations=1
+    )
+    morph = cv2.morphologyEx(
+        morph, cv2.MORPH_CLOSE, kernel_big, iterations=1
+    )
+    return morph
 
 def _threshold_channel(channel, verbose: bool = False):
     blurred = cv2.GaussianBlur(channel, (5, 5), 0)
     adaptive = cv2.adaptiveThreshold(
         blurred, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 4
     )
-    return adaptive
     _, binarized = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     res = cv2.subtract(binarized, adaptive)
-
-    # morph = cv2.morphologyEx(
-    #     res, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8), iterations=4
-    # )
-    morph = cv2.morphologyEx(
-        res, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8), iterations=6
-    )
+    morph = _morph(res)
+    morph = _morph(morph)
+    morph = _morph(morph)
 
     if verbose:
         plt.figure()
@@ -87,11 +105,14 @@ def _threshold_channel(channel, verbose: bool = False):
         plt.title("morphology")
         plt.imshow(morph)
 
-    return adaptive
+    return morph
 
 
 def _get_square(binarized: np.ndarray):
-    edges = imutils.auto_canny(binarized, sigma=0.1)
+    # edges = imutils.auto_canny(binarized, sigma=0.1)
+    # edges without cannny, use sobel or laplacian
+    edges = cv2.Laplacian(binarized, cv2.CV_8U, ksize=5)
+    rr.log("edges", rr.Image(edges))
     cnts = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
@@ -105,7 +126,7 @@ def _get_square(binarized: np.ndarray):
             if peri > max_peri:
                 max_peri = peri
                 biggest = approx
-    return max_peri, biggest
+    return max_peri, biggest, cnts
 
 
 def _get_best_channel(a: np.ndarray, b: np.ndarray):
@@ -119,54 +140,42 @@ def _get_best_channel(a: np.ndarray, b: np.ndarray):
         raise Exception("Both are bad!")
     elif a_cnts is not None and b_cnts is not None:
         if a_peri > b_peri:
+            print("s")
             return a_cnts
         else:
+            print("v")
             return b_cnts
     elif a_cnts is not None:
+        print("s")
         return a_cnts
     else:
+        print("v")
         return b_cnts
 
 
 def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     hsv_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HSV)
-    s = hsv_img[:, :, 1]
+    # s = hsv_img[:, :, 1]
     v = hsv_img[:, :, 2]
 
-    cnts = _get_best_channel(s, v)
+    v_bin = _threshold_channel(v)
+    _, _, cnts = _get_square(v_bin)
 
-    rect = cv2.minAreaRect(cnts)
+    if len(cnts) == 0:
+        raise Exception("No contour found!")
+
+    rect = cv2.minAreaRect(cnts[0])
     box = cv2.boxPoints(rect)
-    pts_src = np.array(box, dtype=np.float32)
-    origin_x, origin_y = box[0]
-    width = rgb_img.shape[0]
-    height = rgb_img.shape[1]
-    pts_dst = np.array(
-        [
-            [0, 0],
-            [width, 0],
-            [width, height],
-            [0, height],
-        ],
-        dtype=np.float32,
-    )
-    M, _ = cv2.findHomography(pts_src, pts_dst)
-    fixed = cv2.warpPerspective(rgb_img, M, (width, height))
 
     if verbose:
         plt.figure()
         rgb_cnts = rgb_img.copy()
         cv2.drawContours(rgb_cnts, cnts, -1, (0, 255, 0), 1)
         cv2.drawContours(rgb_cnts, [box.astype(np.int32)], -1, (0, 0, 255), 2)
-
-        plt.subplot(121)
         plt.imshow(rgb_cnts)
-        plt.subplot(122)
-        plt.imshow(fixed)
-        plt.tight_layout()
 
     corrected = perspective.four_point_transform(rgb_img, box)
-    return corrected, M
+    return corrected
 
 
 def _segment_colors(warped: np.ndarray, boost: bool = False, verbose: bool = False):
