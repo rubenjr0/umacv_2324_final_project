@@ -82,5 +82,6 @@ def solve(face: np.ndarray):
         case State.CROSS:
             action = solve_corners(face)
         case State.CORNERS:
+            action = None
             print("Building next stage")
     return action
