@@ -38,6 +38,49 @@ def _load_image(path: pathlib.Path, verbose: bool = False) -> np.ndarray:
     return img
 
 
+def _binarize_channel(
+    channel, inv: bool = False, name: str = None, verbose: bool = False
+):
+    blurred = cv2.medianBlur(channel, 11)
+    sharpened = cv2.addWeighted(channel, 1.5, blurred, -0.5, 0)
+
+    _, sharp_binarized = cv2.threshold(sharpened, 140, 255, cv2.THRESH_BINARY)
+
+    _, blurred_binarized = cv2.threshold(blurred, 140, 255, cv2.THRESH_BINARY)
+
+    binarized = cv2.bitwise_and(blurred_binarized, sharp_binarized)
+
+    if verbose:
+        rr.log(f"{name}/blurred", rr.Image(blurred))
+        rr.log(f"{name}/sharpened", rr.Image(sharpened))
+        rr.log(f"{name}/blurred_binarized", rr.Image(blurred_binarized))
+        rr.log(f"{name}/sharp_binarized", rr.Image(sharp_binarized))
+        rr.log(f"{name}/binarized", rr.Image(binarized))
+
+    return binarized
+
+
+def binarize(rgb_image: np.ndarray, verbose: bool = False):
+    req = rgb_image.shape[0] * rgb_image.shape[1] * 0.1
+    hsv = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
+    _, s, v = cv2.split(hsv)
+    s = _binarize_channel(s)
+    v = _binarize_channel(v)
+
+    binarized = np.zeros_like(s)
+    binarized[s == 255] += 1
+    binarized[v == 255] += 1
+    binarized = np.where(binarized == 2, 255, 0).astype(np.uint8)
+
+    if np.sum(binarized == 255) < req:
+        binarized = cv2.bitwise_or(s, v)
+
+    if verbose:
+        rr.log("binarized", rr.Image(binarized))
+
+    return binarized
+
+
 def _morph(stuff: np.ndarray):
     kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
@@ -139,9 +182,7 @@ def _get_cells(face: np.ndarray, w_size: int = 10) -> (list[np.ndarray], np.ndar
     return cells, centers
 
 
-def _get_face_colors(
-    face: np.ndarray, verbose: bool = False
-) -> list[np.ndarray]:
+def _get_face_colors(face: np.ndarray, verbose: bool = False) -> list[np.ndarray]:
     w_size = face.shape[0] // 9
     cells, centers = _get_cells(face, w_size=w_size)
     face = [_classify_color(cell) for cell in cells]
@@ -149,8 +190,11 @@ def _get_face_colors(
 
     if verbose:
         for i, (center, color) in enumerate(zip(centers, colors)):
-            rr.log(f"warped/cell_{i}", rr.Boxes2D(centers=[center], sizes=[w_size, w_size], labels=color))
-    
+            rr.log(
+                f"warped/cell_{i}",
+                rr.Boxes2D(centers=[center], sizes=[w_size, w_size], labels=color),
+            )
+
     return colors
 
 
