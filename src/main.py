@@ -27,7 +27,7 @@ while cap.isOpened():
         continue
     segmented = _segment_colors(fixed, boost=True)
     rr.log("transformed/segmented", rr.Image(segmented))
-    colors, centers = _get_face_colors(segmented)
-    action = solve(colors)
-    print(colors)
-    print(action)
+    # colors, centers = _get_face_colors(segmented)
+    # action = solve(colors)
+    # print(colors)
+    # print(action)

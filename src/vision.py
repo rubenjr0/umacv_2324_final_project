@@ -68,9 +68,6 @@ def _morph(stuff: np.ndarray):
         stuff, cv2.MORPH_OPEN, kernel_sml, iterations=4
     )
     morph = cv2.morphologyEx(
-        morph, cv2.MORPH_OPEN, kernel_sml, iterations=2
-    )
-    morph = cv2.morphologyEx(
         morph, cv2.MORPH_OPEN, kernel_big, iterations=1
     )
     morph = cv2.morphologyEx(
@@ -79,16 +76,18 @@ def _morph(stuff: np.ndarray):
     return morph
 
 def _threshold_channel(channel, verbose: bool = False):
-    blurred = cv2.GaussianBlur(channel, (5, 5), 0)
     adaptive = cv2.adaptiveThreshold(
-        blurred, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 4
+        channel, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 4
     )
-    _, binarized = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, binarized = cv2.threshold(channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     res = cv2.subtract(binarized, adaptive)
     morph = _morph(res)
-    morph = _morph(morph)
-    morph = _morph(morph)
+
+    rr.log("adaptive", rr.Image(adaptive))
+    rr.log("binarized", rr.Image(binarized))
+    rr.log("res", rr.Image(res))
+    rr.log("morph", rr.Image(morph))
 
     if verbose:
         plt.figure()
