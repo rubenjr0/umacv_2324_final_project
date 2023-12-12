@@ -62,32 +62,36 @@ def _load_image(
     return img
 
 def _morph(stuff: np.ndarray):
-    kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-    kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+    kernel_med = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    rr.log("0_stuff", rr.Image(stuff))
+
     morph = cv2.morphologyEx(
-        stuff, cv2.MORPH_OPEN, kernel_sml, iterations=4
+        stuff, cv2.MORPH_OPEN, kernel_sml, iterations=5
     )
+    rr.log("1_open_small", rr.Image(morph))
+
     morph = cv2.morphologyEx(
-        morph, cv2.MORPH_OPEN, kernel_big, iterations=1
+        morph, cv2.MORPH_OPEN, kernel_med, iterations=4
     )
+    rr.log("2_open_med", rr.Image(morph))
+
     morph = cv2.morphologyEx(
-        morph, cv2.MORPH_CLOSE, kernel_big, iterations=1
+        morph, cv2.MORPH_CLOSE, kernel_med, iterations=2
     )
+    rr.log("3_close_big", rr.Image(morph))
+
     return morph
 
-def _threshold_channel(channel, verbose: bool = False):
+def _segment_cube(channel, verbose: bool = False):
     adaptive = cv2.adaptiveThreshold(
-        channel, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 4
+        channel, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 6
     )
     _, binarized = cv2.threshold(channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     res = cv2.subtract(binarized, adaptive)
     morph = _morph(res)
-
-    rr.log("adaptive", rr.Image(adaptive))
-    rr.log("binarized", rr.Image(binarized))
-    rr.log("res", rr.Image(res))
-    rr.log("morph", rr.Image(morph))
 
     if verbose:
         plt.figure()
@@ -129,8 +133,8 @@ def _get_square(binarized: np.ndarray):
 
 
 def _get_best_channel(a: np.ndarray, b: np.ndarray):
-    a_bin = _threshold_channel(a)
-    b_bin = _threshold_channel(b)
+    a_bin = _segment_cube(a)
+    b_bin = _segment_cube(b)
 
     a_peri, a_cnts = _get_square(a_bin)
     b_peri, b_cnts = _get_square(b_bin)
@@ -157,7 +161,7 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     # s = hsv_img[:, :, 1]
     v = hsv_img[:, :, 2]
 
-    v_bin = _threshold_channel(v)
+    v_bin = _segment_cube(v)
     _, _, cnts = _get_square(v_bin)
 
     if len(cnts) == 0:

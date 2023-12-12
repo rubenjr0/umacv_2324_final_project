@@ -6,8 +6,6 @@ from vision import (
     _preprocess,
     _fix_perspective,
     _segment_colors,
-    _get_face_colors,
-    _threshold_channel,
 )
 from solver import solve
 
