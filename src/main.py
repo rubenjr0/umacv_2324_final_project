@@ -3,6 +3,7 @@ import numpy as np
 import rerun as rr
 
 from vision import (
+    _eq, _boost,
     _preprocess,
     _fix_perspective,
     _segment_colors,
@@ -18,13 +19,15 @@ while cap.isOpened():
     frame = _preprocess(frame)
     rr.log("image/rgb", rr.Image(frame))
     try:
-        fixed = _fix_perspective(frame)
-        rr.log("transformed", rr.Image(fixed))
+        warped = _fix_perspective(frame)
+        warped = _eq(warped)
+        warped = _boost(warped)
+        rr.log("warped", rr.Image(warped))
     except Exception as e:
         print(e)
         continue
-    segmented = _segment_colors(fixed, boost=True)
-    rr.log("transformed/segmented", rr.Image(segmented))
+    # segmented_colors = _segment_colors(warped, boost=True)
+    # rr.log("segmented", rr.Image(segmented_colors))
     # colors, centers = _get_face_colors(segmented)
     # action = solve(colors)
     # print(colors)

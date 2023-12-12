@@ -33,6 +33,10 @@ def _eq(rgb_img: np.ndarray, verbose: bool = False):
     return img
 
 
+def _boost(rgb_img: np.ndarray, verbose: bool = False):
+    return cv2.convertScaleAbs(rgb_img, alpha=1.4, beta=0)
+
+
 def _preprocess(bgr_img: np.ndarray, eq: bool = False, verbose: bool = False):
     rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
     rgb_img = imutils.resize(rgb_img, width=240)
@@ -61,60 +65,52 @@ def _load_image(
         plt.tight_layout()
     return img
 
+
 def _morph(stuff: np.ndarray):
-    kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-    kernel_med = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    rr.log("0_stuff", rr.Image(stuff))
 
-    morph = cv2.morphologyEx(
-        stuff, cv2.MORPH_OPEN, kernel_sml, iterations=5
-    )
-    rr.log("1_open_small", rr.Image(morph))
+    morph = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, kernel_sml, iterations=5)
 
-    morph = cv2.morphologyEx(
-        morph, cv2.MORPH_OPEN, kernel_med, iterations=4
-    )
-    rr.log("2_open_med", rr.Image(morph))
+    morph = cv2.morphologyEx(morph, cv2.MORPH_OPEN, kernel_big, iterations=3)
 
-    morph = cv2.morphologyEx(
-        morph, cv2.MORPH_CLOSE, kernel_med, iterations=2
-    )
-    rr.log("3_close_big", rr.Image(morph))
+    morph = cv2.morphologyEx(morph, cv2.MORPH_CLOSE, kernel_big, iterations=5)
 
     return morph
 
-def _segment_cube(channel, verbose: bool = False):
-    adaptive = cv2.adaptiveThreshold(
-        channel, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 6
-    )
-    _, binarized = cv2.threshold(channel, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    res = cv2.subtract(binarized, adaptive)
-    morph = _morph(res)
+def _binarize_channel(channel, verbose: bool = False):
+    blurred = cv2.medianBlur(channel, 11)
+    sharpened = cv2.addWeighted(channel, 1.5, blurred, -0.5, 0)
+    _, blurred_binarized = cv2.threshold(
+        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    _, sharp_binarized = cv2.threshold(
+        sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    binarized = cv2.bitwise_and(blurred_binarized, sharp_binarized)
 
     if verbose:
-        plt.figure()
-        plt.subplot(141)
-        plt.title("binarized")
-        plt.imshow(binarized)
-        plt.subplot(142)
-        plt.title("adaptive")
-        plt.imshow(adaptive)
-        plt.subplot(143)
-        plt.title("res")
-        plt.imshow(res)
-        plt.subplot(144)
-        plt.title("morphology")
-        plt.imshow(morph)
+        rr.log("blurred", rr.Image(blurred))
+        rr.log("sharpened", rr.Image(sharpened))
+        rr.log("binarized", rr.Image(binarized))
+
+    return binarized
+
+
+def _segment_cube(s: np.ndarray, v: np.ndarray, verbose: bool = False):
+    s_bin = _binarize_channel(s, verbose=verbose)
+    v_bin = _binarize_channel(v, verbose=verbose)
+    binarized = cv2.bitwise_or(s_bin, v_bin)
+    morph = _morph(binarized)
+    rr.log("binarized", rr.Image(binarized))
+    rr.log("morph", rr.Image(morph))
 
     return morph
 
 
 def _get_square(binarized: np.ndarray):
-    # edges = imutils.auto_canny(binarized, sigma=0.1)
-    # edges without cannny, use sobel or laplacian
-    edges = cv2.Laplacian(binarized, cv2.CV_8U, ksize=5)
+    edges = imutils.auto_canny(binarized, sigma=0.1)
     rr.log("edges", rr.Image(edges))
     cnts = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
@@ -129,65 +125,31 @@ def _get_square(binarized: np.ndarray):
             if peri > max_peri:
                 max_peri = peri
                 biggest = approx
-    return max_peri, biggest, cnts
-
-
-def _get_best_channel(a: np.ndarray, b: np.ndarray):
-    a_bin = _segment_cube(a)
-    b_bin = _segment_cube(b)
-
-    a_peri, a_cnts = _get_square(a_bin)
-    b_peri, b_cnts = _get_square(b_bin)
-
-    if a_cnts is None and b_cnts is None:
-        raise Exception("Both are bad!")
-    elif a_cnts is not None and b_cnts is not None:
-        if a_peri > b_peri:
-            print("s")
-            return a_cnts
-        else:
-            print("v")
-            return b_cnts
-    elif a_cnts is not None:
-        print("s")
-        return a_cnts
-    else:
-        print("v")
-        return b_cnts
+    return biggest
 
 
 def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     hsv_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HSV)
-    # s = hsv_img[:, :, 1]
+    s = hsv_img[:, :, 1]
     v = hsv_img[:, :, 2]
 
-    v_bin = _segment_cube(v)
-    _, _, cnts = _get_square(v_bin)
+    segmented = _segment_cube(s, v, verbose=verbose)
+    contour = _get_square(segmented)
 
-    if len(cnts) == 0:
+    if contour is None:
         raise Exception("No contour found!")
 
-    rect = cv2.minAreaRect(cnts[0])
+    rect = cv2.minAreaRect(contour)
     box = cv2.boxPoints(rect)
-
-    if verbose:
-        plt.figure()
-        rgb_cnts = rgb_img.copy()
-        cv2.drawContours(rgb_cnts, cnts, -1, (0, 255, 0), 1)
-        cv2.drawContours(rgb_cnts, [box.astype(np.int32)], -1, (0, 0, 255), 2)
-        plt.imshow(rgb_cnts)
 
     corrected = perspective.four_point_transform(rgb_img, box)
     return corrected
 
 
 def _segment_colors(warped: np.ndarray, boost: bool = False, verbose: bool = False):
-    if boost:
-        warped = cv2.convertScaleAbs(warped, alpha=1.4, beta=0)
-        warped = _eq(warped)
     flattened = warped.reshape((-1, 3))
     flattened = np.float32(flattened)
-    iters = 16
+    iters = 8
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, iters, 0.1)
     _, labels, centers = cv2.kmeans(
         flattened, 8, None, criteria, iters, cv2.KMEANS_PP_CENTERS
@@ -196,6 +158,8 @@ def _segment_colors(warped: np.ndarray, boost: bool = False, verbose: bool = Fal
     labels = labels.flatten()
     flattened = centers[labels]
     segmented = flattened.reshape(warped.shape)
+    if boost:
+        segmented = _boost(segmented)
 
     if verbose:
         plt.figure()
