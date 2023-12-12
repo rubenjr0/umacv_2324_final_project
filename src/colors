@@ -1,0 +1,24 @@
+COLOR  | HSV | LAB  | YCRCB
+WHITE  | V   | L    | Y
+RED    | V   | A    | CR
+YELLOW | V   | L,B  | Y,-CB
+ORANGE | V   | -    | CR
+GREEN  | V   | -A,B | -CR, -CB
+BLUE   | S   | -B   | -CR, CB
+
+
+COLOR  | HSV | LAB  | YCrCb   |
+WHITE  | V   | L    | Y       |
+RED    | V   | A,B  | CR      |
+YELLOW | V   | L,B  | Y,-CB   |
+ORANGE | V   | B    | -CB,CR  |
+GREEN  | -   | -A,B | -CR,-CB |
+BLUE   | -   | -B   | CB      |
+
+
+WHITE  : HSV    V
+GREEN  : LAB    A
+YELLOW : LAB    B
+BLUE   : LAB    -B
+ORANGE : LAB    B
+RED    : YCrCb  Cr
