@@ -2,17 +2,15 @@ import cv2
 import numpy as np
 import rerun as rr
 
-COLORS = {
-    "blue": [(0, 0, 104), (0, 255, 0), (151, 151, 255)],
-    "green": [(0, 104, 0), (0, 255, 0), (151, 202, 151)],
-    "orange": [(104, 68, 0), (255, 165, 0), (255, 218, 151)],
-    "red": [(104, 0, 0), (255, 0, 0), (255, 151, 151)],
-    "white": [(204, 204, 204), (255, 255, 255), (255, 255, 255)],
-    "yellow": [(104, 104, 0), (255, 255, 0), (255, 255, 151)],
+# (lower, upper) ranges in HSV
+HSV_RANGES = {
+    "red": ((0, 50, 50), (8, 255, 255)),
+    "orange": ((8, 50, 50), (24, 255, 255)),
+    "yellow": ((24, 50, 50), (34, 255, 255)),
+    "green": ((34, 50, 50), (85, 255, 255)),
+    "blue": ((85, 50, 50), (135, 255, 255)),
+    "white": ((0, 0, 200), (255, 50, 255)),
 }
-
-COLORS = {name: np.array(color) for name, color in COLORS.items()}
-
 
 def _posterize(rgb_image: np.ndarray, level: int = 8) -> np.ndarray:
     indices = np.arange(0, 256)
@@ -25,14 +23,20 @@ def _posterize(rgb_image: np.ndarray, level: int = 8) -> np.ndarray:
     return posterized
 
 
-def _distance(a: np.ndarray, b: np.ndarray) -> float:
-    return np.sqrt(np.sum((a - b) ** 2))
 
 
-def _classify_color(piece: np.ndarray) -> (str, float):
-    scores = {
-        color: np.median([_distance(piece, shade) for shade in COLORS[color]])
-        for color in COLORS
-    }
-    best_color = max(scores, key=scores.get)
-    return best_color, scores[best_color]
+def _classify_color(piece: np.ndarray) -> str:
+    """Classify the color of a piece of the cube
+
+    Args:
+        piece (np.ndarray): A square piece of the image
+
+    Returns:
+        str: The color of the piece (red, orange, yellow, green, blue, white)
+    """
+    hsv = cv2.cvtColor(piece, cv2.COLOR_RGB2HSV)
+    
+    masks = {name: cv2.inRange(hsv, *ranges) for name, ranges in HSV_RANGES.items()}
+    matches = {name: cv2.countNonZero(mask) for name, mask in masks.items()}
+    color = max(matches, key=matches.get)
+    return color

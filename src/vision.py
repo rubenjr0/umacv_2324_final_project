@@ -4,7 +4,7 @@ import pathlib
 import numpy as np
 from imutils import perspective
 from matplotlib import pyplot as plt
-from colors import binarize, _classify_color
+from colors import _classify_color, HSV_RANGES
 
 import rerun as rr
 
@@ -44,28 +44,32 @@ def _binarize_channel(
     blurred = cv2.medianBlur(channel, 11)
     sharpened = cv2.addWeighted(channel, 1.5, blurred, -0.5, 0)
 
-    _, sharp_binarized = cv2.threshold(sharpened, 140, 255, cv2.THRESH_BINARY)
+    blurred_avg = np.mean(blurred)
+    sharpened_avg = np.mean(sharpened)
 
-    _, blurred_binarized = cv2.threshold(blurred, 140, 255, cv2.THRESH_BINARY)
+    _, blurred_binarized = cv2.threshold(blurred, blurred_avg, 255, cv2.THRESH_BINARY)
+    _, sharp_binarized = cv2.threshold(sharpened, sharpened_avg, 255, cv2.THRESH_BINARY)
 
     binarized = cv2.bitwise_and(blurred_binarized, sharp_binarized)
 
     if verbose:
         rr.log(f"{name}/blurred", rr.Image(blurred))
         rr.log(f"{name}/sharpened", rr.Image(sharpened))
-        rr.log(f"{name}/blurred_binarized", rr.Image(blurred_binarized))
-        rr.log(f"{name}/sharp_binarized", rr.Image(sharp_binarized))
+        rr.log(f"{name}/mean/blurred", rr.TimeSeriesScalar(blurred_avg))
+        rr.log(f"{name}/mean/sharpened", rr.TimeSeriesScalar(sharpened_avg))
+        rr.log(f"{name}/blurred/binarized", rr.Image(blurred_binarized))
+        rr.log(f"{name}/sharpened/binarized", rr.Image(sharp_binarized))
         rr.log(f"{name}/binarized", rr.Image(binarized))
 
     return binarized
 
 
-def binarize(rgb_image: np.ndarray, verbose: bool = False):
+def __binarize(rgb_image: np.ndarray, verbose: bool = False):
     req = rgb_image.shape[0] * rgb_image.shape[1] * 0.1
     hsv = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
     _, s, v = cv2.split(hsv)
-    s = _binarize_channel(s)
-    v = _binarize_channel(v)
+    s = _binarize_channel(s, name='s', verbose=True)
+    v = _binarize_channel(v, name='v', verbose=True)
 
     binarized = np.zeros_like(s)
     binarized[s == 255] += 1
@@ -89,14 +93,21 @@ def _morph(stuff: np.ndarray):
     morph = cv2.morphologyEx(morph, cv2.MORPH_CLOSE, kernel_big, iterations=5)
     return morph
 
-
 def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
-    binarized = binarize(rgb_img)
-    morph = _morph(binarized)
+    hsv = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HSV)
+    hsv[:, :, 0] = hsv[:, :, 0] % 165
+    mask = np.zeros_like(hsv[:, :, 0])
+    for color, (lower, upper) in HSV_RANGES.items():
+        color_mask = cv2.inRange(hsv, lower, upper)
+        mask |= color_mask
+        if verbose:
+            rr.log(f"mask/{color}", rr.Image(color_mask))
+
+    mask = _morph(mask)
+    rr.log("bin", rr.Image(mask))
     if verbose:
-        rr.log("image/binarized", rr.Image(binarized))
-        rr.log("image/mask", rr.Image(morph))
-    return morph
+        rr.log("image/mask", rr.Image(mask))
+    return mask
 
 
 def _get_box(binarized: np.ndarray):
@@ -128,7 +139,6 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     box = cv2.boxPoints(rect)
 
     # if the perimeter is too small, the contour is probably noise
-    rr.log("peri", rr.TimeSeriesScalar(peri))
     if peri < 240:
         raise Exception("Contour too small!")
 
@@ -162,7 +172,7 @@ def _segment_colors(warped: np.ndarray, boost: bool = False, verbose: bool = Fal
     return segmented
 
 
-def _get_cells(face: np.ndarray, w_size: int = 10) -> (list[np.ndarray], np.ndarray):
+def _get_cells(face: np.ndarray, w_size: int) -> (list[np.ndarray], np.ndarray):
     height, width, _ = face.shape
     cell_width = width // 3
     cell_height = height // 3
@@ -185,14 +195,15 @@ def _get_cells(face: np.ndarray, w_size: int = 10) -> (list[np.ndarray], np.ndar
 def _get_face_colors(face: np.ndarray, verbose: bool = False) -> list[np.ndarray]:
     w_size = face.shape[0] // 9
     cells, centers = _get_cells(face, w_size=w_size)
-    face = [_classify_color(cell) for cell in cells]
-    colors = [color for (color, _) in face]
+    colors = [_classify_color(cell) for cell in cells]
+    print(colors)
 
     if verbose:
         for i, (center, color) in enumerate(zip(centers, colors)):
+            print(f"cell {i}: {color}")
             rr.log(
                 f"warped/cell_{i}",
-                rr.Boxes2D(centers=[center], sizes=[w_size, w_size], labels=color),
+                rr.Boxes2D(centers=[center], sizes=[w_size, w_size], labels=color, class_ids=[i]),
             )
 
     return colors
