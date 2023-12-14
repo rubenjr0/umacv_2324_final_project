@@ -1,21 +1,22 @@
+import pathlib
+
 import cv2
 import imutils
-import pathlib
 import numpy as np
-from imutils import perspective
-from matplotlib import pyplot as plt
-from colors import _classify_color, HSV_RANGES
-
 import rerun as rr
+from colors import HSV_RANGES, _classify_color, _get_hsv
+from imutils import perspective
 
-
-def _boost(rgb_img: np.ndarray, verbose: bool = False):
-    return cv2.convertScaleAbs(rgb_img, alpha=1.4, beta=0)
+kernel_xl = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
+kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+kernel_med = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
 
 def _preprocess(bgr_img: np.ndarray, verbose: bool = False):
     rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
     rgb_img = imutils.resize(rgb_img, width=240)
+
     return rgb_img
 
 
@@ -23,79 +24,19 @@ def _load_image(path: pathlib.Path, verbose: bool = False) -> np.ndarray:
     img = cv2.imread(path)
     img = _preprocess(img, verbose=verbose)
     if verbose:
-        plt.figure()
-        plt.imshow(img)
-        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        h, s, v = cv2.split(hsv)
-        plt.figure()
-        plt.subplot(131)
-        plt.imshow(h)
-        plt.subplot(132)
-        plt.imshow(s)
-        plt.subplot(133)
-        plt.imshow(v)
-        plt.tight_layout()
+        rr.log("image/rgb", rr.Image(img))
     return img
 
 
-def _binarize_channel(
-    channel, inv: bool = False, name: str = None, verbose: bool = False
-):
-    blurred = cv2.medianBlur(channel, 11)
-    sharpened = cv2.addWeighted(channel, 1.5, blurred, -0.5, 0)
-
-    blurred_avg = np.mean(blurred)
-    sharpened_avg = np.mean(sharpened)
-
-    _, blurred_binarized = cv2.threshold(blurred, blurred_avg, 255, cv2.THRESH_BINARY)
-    _, sharp_binarized = cv2.threshold(sharpened, sharpened_avg, 255, cv2.THRESH_BINARY)
-
-    binarized = cv2.bitwise_and(blurred_binarized, sharp_binarized)
-
-    if verbose:
-        rr.log(f"{name}/blurred", rr.Image(blurred))
-        rr.log(f"{name}/sharpened", rr.Image(sharpened))
-        rr.log(f"{name}/mean/blurred", rr.TimeSeriesScalar(blurred_avg))
-        rr.log(f"{name}/mean/sharpened", rr.TimeSeriesScalar(sharpened_avg))
-        rr.log(f"{name}/blurred/binarized", rr.Image(blurred_binarized))
-        rr.log(f"{name}/sharpened/binarized", rr.Image(sharp_binarized))
-        rr.log(f"{name}/binarized", rr.Image(binarized))
-
-    return binarized
-
-
-def __binarize(rgb_image: np.ndarray, verbose: bool = False):
-    req = rgb_image.shape[0] * rgb_image.shape[1] * 0.1
-    hsv = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
-    _, s, v = cv2.split(hsv)
-    s = _binarize_channel(s, name='s', verbose=True)
-    v = _binarize_channel(v, name='v', verbose=True)
-
-    binarized = np.zeros_like(s)
-    binarized[s == 255] += 1
-    binarized[v == 255] += 1
-    binarized = np.where(binarized == 2, 255, 0).astype(np.uint8)
-
-    if np.sum(binarized == 255) < req:
-        binarized = cv2.bitwise_or(s, v)
-
-    if verbose:
-        rr.log("binarized", rr.Image(binarized))
-
-    return binarized
-
-
 def _morph(stuff: np.ndarray):
-    kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-    morph = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, kernel_sml, iterations=5)
-    morph = cv2.morphologyEx(morph, cv2.MORPH_OPEN, kernel_big, iterations=3)
-    morph = cv2.morphologyEx(morph, cv2.MORPH_CLOSE, kernel_big, iterations=5)
-    return morph
+    morph_sml = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, kernel_sml, iterations=2)
+    morph_med = cv2.morphologyEx(morph_sml, cv2.MORPH_CLOSE, kernel_med, iterations=3)
+    morph_big = cv2.morphologyEx(morph_med, cv2.MORPH_OPEN, kernel_big, iterations=2)
+    return morph_big
+
 
 def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
-    hsv = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HSV)
-    hsv[:, :, 0] = hsv[:, :, 0] % 165
+    hsv = _get_hsv(rgb_img, verbose=True)
     mask = np.zeros_like(hsv[:, :, 0])
     for color, (lower, upper) in HSV_RANGES.items():
         color_mask = cv2.inRange(hsv, lower, upper)
@@ -104,17 +45,46 @@ def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
             rr.log(f"mask/{color}", rr.Image(color_mask))
 
     mask = _morph(mask)
-    rr.log("bin", rr.Image(mask))
     if verbose:
-        rr.log("image/mask", rr.Image(mask))
+        rr.log("morph", rr.Image(mask))
+
     return mask
+
+
+def _compactness(contour: np.ndarray) -> float:
+    """Calculate the compactness of a contour
+
+    Args:
+        contour (np.ndarray): A contour
+
+    Returns:
+        float: The compactness of the contour
+    """
+    area = cv2.contourArea(contour)
+    perimeter = cv2.arcLength(contour, True)
+    compactness = 4 * np.pi * area / (perimeter**2)
+    return compactness
+
+
+def _squareness_error(contour: np.ndarray) -> float:
+    """Calculate the squareness error of a contour
+
+    Args:
+        contour (np.ndarray): A contour
+
+    Returns:
+        float: The squareness error of the contour
+    """
+
+    compactness = _compactness(contour)
+    return 1e6 * (1 / 16 - compactness) ** 2
 
 
 def _get_box(binarized: np.ndarray):
     edges = cv2.Laplacian(binarized, cv2.CV_8U, ksize=5)
     cnts = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
-    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+    cnts = sorted(cnts, key=_squareness_error)
 
     max_peri = -np.inf
     biggest = None
@@ -129,7 +99,7 @@ def _get_box(binarized: np.ndarray):
 
 
 def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
-    segmented = _segment_cube(rgb_img, verbose=verbose)
+    segmented = _segment_cube(rgb_img, verbose=True)
     contour, peri = _get_box(segmented)
 
     if contour is None:
@@ -138,38 +108,18 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     rect = cv2.minAreaRect(contour)
     box = cv2.boxPoints(rect)
 
-    # if the perimeter is too small, the contour is probably noise
+    # if the perimeter is too small the contour is probably noise
     if peri < 240:
         raise Exception("Contour too small!")
 
     warped = perspective.four_point_transform(rgb_img, box)
     if verbose:
         rr.log(
-            "image/corners", rr.Points2D(contour[:, 0, :], colors=[255, 0, 0], radii=3)
+            "image/corners",
+            rr.Points2D(contour[:, 0, :], colors=[255, 0, 0], radii=3),
         )
         rr.log("warped", rr.Image(warped))
     return warped
-
-
-def _segment_colors(warped: np.ndarray, boost: bool = False, verbose: bool = False):
-    flattened = warped.reshape((-1, 3))
-    flattened = np.float32(flattened)
-    iters = 8
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, iters, 0.1)
-    _, labels, centers = cv2.kmeans(
-        flattened, 8, None, criteria, iters, cv2.KMEANS_PP_CENTERS
-    )
-    centers = np.uint8(centers)
-    labels = labels.flatten()
-    flattened = centers[labels]
-    segmented = flattened.reshape(warped.shape)
-    if boost:
-        segmented = _boost(segmented)
-
-    if verbose:
-        rr.log("warped/segmented_colors", rr.Image(segmented))
-
-    return segmented
 
 
 def _get_cells(face: np.ndarray, w_size: int) -> (list[np.ndarray], np.ndarray):
@@ -196,23 +146,24 @@ def _get_face_colors(face: np.ndarray, verbose: bool = False) -> list[np.ndarray
     w_size = face.shape[0] // 9
     cells, centers = _get_cells(face, w_size=w_size)
     colors = [_classify_color(cell) for cell in cells]
-    print(colors)
-
     if verbose:
         for i, (center, color) in enumerate(zip(centers, colors)):
-            print(f"cell {i}: {color}")
             rr.log(
                 f"warped/cell_{i}",
-                rr.Boxes2D(centers=[center], sizes=[w_size, w_size], labels=color, class_ids=[i]),
+                rr.Boxes2D(
+                    centers=[center],
+                    sizes=[w_size*2, w_size*2],
+                    labels=color,
+                    class_ids=[i],
+                ),
             )
-
+    colors = np.array(colors).reshape(3, 3)
     return colors
 
 
 def get_face(
     rgb_image: np.ndarray, w_size: int = 10, verbose: bool = False
 ) -> np.ndarray:
-    warped, M = _fix_perspective(rgb_image, verbose=verbose)
-    segmented = _segment_colors(warped, boost=True, verbose=verbose)
-    colors = _get_face_colors(segmented, w_size=w_size, verbose=verbose)
+    warped = _fix_perspective(rgb_image, verbose=verbose)
+    colors = _get_face_colors(warped, w_size=w_size, verbose=verbose)
     return colors
