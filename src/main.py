@@ -5,7 +5,7 @@ from colors import _gamma_correction
 from solver import solve
 
 
-rr.init("rerun_example_demo", spawn=True)
+rr.init("rubiks cube project", spawn=True)
 
 cap = cv2.VideoCapture(0)
 
