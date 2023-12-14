@@ -36,7 +36,7 @@ def _morph(stuff: np.ndarray):
 
 
 def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
-    hsv = _get_hsv(rgb_img, verbose=True)
+    hsv = _get_hsv(rgb_img)
     mask = np.zeros_like(hsv[:, :, 0])
     for color, (lower, upper) in HSV_RANGES.items():
         color_mask = cv2.inRange(hsv, lower, upper)
@@ -99,7 +99,7 @@ def _get_box(binarized: np.ndarray):
 
 
 def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
-    segmented = _segment_cube(rgb_img, verbose=True)
+    segmented = _segment_cube(rgb_img)
     contour, peri = _get_box(segmented)
 
     if contour is None:
