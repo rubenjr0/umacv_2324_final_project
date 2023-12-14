@@ -86,7 +86,6 @@ def solve_corners(face: np.ndarray) -> Action:
 
 def solve(face: np.ndarray) -> Action:
     state = get_state(face)
-    print(state, "->", end=" ")
     match state:
         case State.RAND:
             action = solve_cross(face)

@@ -3,51 +3,43 @@ import pathlib
 import cv2
 import imutils
 import numpy as np
-import rerun as rr
 from colors import HSV_RANGES, _classify_color, _get_hsv
 from imutils import perspective
 
-kernel_xl = cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11))
-kernel_big = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-kernel_med = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-kernel_sml = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+KERNEL_SML = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+KERNEL_MED = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+KERNEL_BIG = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+
+WIDTH = 240
 
 
-def _preprocess(bgr_img: np.ndarray, verbose: bool = False):
+def _preprocess(bgr_img: np.ndarray):
     rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
-    rgb_img = imutils.resize(rgb_img, width=240)
+    rgb_img = imutils.resize(rgb_img, width=WIDTH)
 
     return rgb_img
 
 
-def _load_image(path: pathlib.Path, verbose: bool = False) -> np.ndarray:
+def _load_image(path: pathlib.Path) -> np.ndarray:
     img = cv2.imread(path)
-    img = _preprocess(img, verbose=verbose)
-    if verbose:
-        rr.log("image/rgb", rr.Image(img))
+    img = _preprocess(img)
     return img
 
 
 def _morph(stuff: np.ndarray):
-    morph_sml = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, kernel_sml, iterations=2)
-    morph_med = cv2.morphologyEx(morph_sml, cv2.MORPH_CLOSE, kernel_med, iterations=3)
-    morph_big = cv2.morphologyEx(morph_med, cv2.MORPH_OPEN, kernel_big, iterations=2)
+    morph_sml = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, KERNEL_SML, iterations=2)
+    morph_med = cv2.morphologyEx(morph_sml, cv2.MORPH_CLOSE, KERNEL_MED, iterations=3)
+    morph_big = cv2.morphologyEx(morph_med, cv2.MORPH_OPEN, KERNEL_BIG, iterations=2)
     return morph_big
 
 
-def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
+def _segment_cube(rgb_img: np.ndarray):
     hsv = _get_hsv(rgb_img)
     mask = np.zeros_like(hsv[:, :, 0])
     for color, (lower, upper) in HSV_RANGES.items():
         color_mask = cv2.inRange(hsv, lower, upper)
         mask |= color_mask
-        if verbose:
-            rr.log(f"mask/{color}", rr.Image(color_mask))
-
     mask = _morph(mask)
-    if verbose:
-        rr.log("morph", rr.Image(mask))
-
     return mask
 
 
@@ -95,10 +87,11 @@ def _get_box(binarized: np.ndarray):
             if peri > max_peri:
                 max_peri = peri
                 biggest = approx
+                biggest = sorted(biggest, key=lambda x: (x[0][1], x[0][0]))
     return biggest, max_peri
 
 
-def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
+def _fix_perspective(rgb_img: np.ndarray):
     segmented = _segment_cube(rgb_img)
     contour, peri = _get_box(segmented)
 
@@ -112,14 +105,15 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     if peri < 240:
         raise Exception("Contour too small!")
 
-    warped = perspective.four_point_transform(rgb_img, box)
-    if verbose:
-        rr.log(
-            "image/corners",
-            rr.Points2D(contour[:, 0, :], colors=[255, 0, 0], radii=3),
-        )
-        rr.log("warped", rr.Image(warped))
-    return warped
+    cropped = perspective.four_point_transform(rgb_img, box)
+
+    pts_dst = np.array(
+        [[WIDTH, WIDTH], [WIDTH, WIDTH * 2], [WIDTH * 2, WIDTH], [WIDTH * 2, WIDTH * 2]]
+    )
+
+    M, _ = cv2.findHomography(box, pts_dst)
+    warped = cv2.warpPerspective(rgb_img, M, (WIDTH * 3, WIDTH * 3))
+    return cropped, warped, M
 
 
 def _get_cells(face: np.ndarray, w_size: int) -> (list[np.ndarray], np.ndarray):
@@ -146,24 +140,5 @@ def _get_face_colors(face: np.ndarray, verbose: bool = False) -> list[np.ndarray
     w_size = face.shape[0] // 9
     cells, centers = _get_cells(face, w_size=w_size)
     colors = [_classify_color(cell) for cell in cells]
-    if verbose:
-        for i, (center, color) in enumerate(zip(centers, colors)):
-            rr.log(
-                f"warped/cell_{i}",
-                rr.Boxes2D(
-                    centers=[center],
-                    sizes=[w_size*2, w_size*2],
-                    labels=color,
-                    class_ids=[i],
-                ),
-            )
     colors = np.array(colors).reshape(3, 3)
-    return colors
-
-
-def get_face(
-    rgb_image: np.ndarray, w_size: int = 10, verbose: bool = False
-) -> np.ndarray:
-    warped = _fix_perspective(rgb_image, verbose=verbose)
-    colors = _get_face_colors(warped, w_size=w_size, verbose=verbose)
     return colors
