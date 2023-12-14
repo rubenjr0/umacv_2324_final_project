@@ -87,7 +87,7 @@ def _get_box(binarized: np.ndarray):
             if peri > max_peri:
                 max_peri = peri
                 biggest = approx
-                biggest = sorted(biggest, key=lambda x: (x[0][1], x[0][0]))
+                biggest = np.array(sorted(biggest, key=lambda x: x[0][0] + x[0][1]))
     return biggest, max_peri
 
 
@@ -108,7 +108,7 @@ def _fix_perspective(rgb_img: np.ndarray):
     cropped = perspective.four_point_transform(rgb_img, box)
 
     pts_dst = np.array(
-        [[WIDTH, WIDTH], [WIDTH, WIDTH * 2], [WIDTH * 2, WIDTH], [WIDTH * 2, WIDTH * 2]]
+        [[WIDTH, WIDTH], [WIDTH * 2, WIDTH], [WIDTH*2, WIDTH * 2], [WIDTH, WIDTH * 2]]
     )
 
     M, _ = cv2.findHomography(box, pts_dst)

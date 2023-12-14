@@ -10,7 +10,6 @@ while cap.isOpened():
     _, frame = cap.read()
     frame = _preprocess(frame)
     frame = _gamma_correction(frame, gamma=1)
-
     try:
         cropped, warped, M = _fix_perspective(frame)
         colors = _get_face_colors(cropped)
@@ -24,14 +23,12 @@ while cap.isOpened():
         # undo perspective transform
         M_inv = np.linalg.inv(M)
         unwarped = cv2.warpPerspective(warped, M_inv, (frame.shape[1], frame.shape[0]))
-        frame = cv2.cvtColor(unwarped, cv2.COLOR_BGR2RGB)
 
     except Exception as _e:
         continue
-    
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    frame = cv2.cvtColor(unwarped, cv2.COLOR_BGR2RGB)
     cv2.imshow("frame", frame)
-    
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
