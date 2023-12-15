@@ -116,7 +116,7 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
         raise Exception("Contour too small!")
 
     if verbose:
-        rr.log("image/corners", rr.Points2D(positions=box, colors=(255, 0,0), radii=6))
+        rr.log("image/corners", rr.Points2D(positions=box, colors=(255, 0, 0), radii=6))
 
     cropped = perspective.four_point_transform(rgb_img, box)
 

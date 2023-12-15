@@ -22,15 +22,20 @@ COLOR_CODES = {
     "white": "W",
 }
 
+
 def _gamma_correction(channel: np.ndarray, gamma: float = 1.0) -> np.ndarray:
     inv_gamma = 1.0 / gamma
-    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    table = np.array(
+        [((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]
+    ).astype("uint8")
     return cv2.LUT(channel, table)
+
 
 def _get_hsv(rgb_image: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
     hsv[..., 0] = hsv[..., 0] % 170
     return hsv
+
 
 def _classify_color(piece: np.ndarray) -> str:
     """Classify the color of a piece of the cube
@@ -47,4 +52,3 @@ def _classify_color(piece: np.ndarray) -> str:
     matches = {name: cv2.countNonZero(mask) for name, mask in masks.items()}
     color = max(matches, key=matches.get)
     return color
-

@@ -1,3 +1,5 @@
+from sys import argv
+
 import cv2
 import numpy as np
 import rerun as rr
@@ -5,7 +7,10 @@ from colors import _gamma_correction
 from vision import _fix_perspective, _get_face_colors, _preprocess
 from webcolors import name_to_rgb
 
-cap = cv2.VideoCapture(0)
+camera_idx = int(argv[1]) if len(argv) > 1 else 0
+gamma = float(argv[2]) if len(argv) > 2 else 0.6
+
+cap = cv2.VideoCapture(camera_idx)
 
 rr.init("rubik", spawn=True)
 
@@ -13,7 +18,7 @@ while cap.isOpened():
     _, frame = cap.read()
     frame = _preprocess(frame)
     rr.log("image/rgb", rr.Image(frame))
-    frame = _gamma_correction(frame, gamma=1)
+    frame = _gamma_correction(frame, gamma=gamma)
     rr.log("image/corrected", rr.Image(frame))
 
     try:
