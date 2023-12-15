@@ -33,9 +33,9 @@ def _morph(stuff: np.ndarray, verbose: bool = False):
     eroded_big = cv2.erode(eroded_med, KERNEL_BIG, iterations=1)
 
     filtered = cv2.boxFilter(eroded_big, -1, (7, 7), normalize=False)
-    dilated = cv2.dilate(filtered, KERNEL_MED, iterations=4)
+    dilated = cv2.dilate(filtered, KERNEL_MED, iterations=5)
 
-    closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, KERNEL_MED, iterations=4)
+    closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, KERNEL_MED, iterations=6)
 
     if verbose:
         rr.log("morph/stuff", rr.Image(stuff))
@@ -115,7 +115,7 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     box = cv2.boxPoints(rect)
 
     # if the perimeter is too small the contour is probably noise
-    if peri < 250 or peri > 800:
+    if peri < 250 or peri > 900:
         raise Exception("Contour could be noise!")
 
     cropped = perspective.four_point_transform(rgb_img, box)

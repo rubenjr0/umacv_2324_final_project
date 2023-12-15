@@ -41,8 +41,16 @@ def _format_cube(cube: list[np.ndarray]) -> str:
     return "".join(cube)
 
 
-camera_idx = int(argv[1]) if len(argv) > 1 else 0
-gamma = float(argv[2]) if len(argv) > 2 else 0.6
+if '-c' in argv:
+    camera_idx = int(argv[argv.index('-c') + 1])
+else:
+    camera_idx = -1
+if '-g' in argv:
+    gamma = float(argv[argv.index('-g') + 1])
+else:
+    gamma = 1.0
+
+print('Capturing from camera', camera_idx, 'with gamma correction', gamma)
 
 cap = cv2.VideoCapture(camera_idx)
 cube = []

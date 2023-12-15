@@ -3,12 +3,18 @@ from sys import argv
 import cv2
 import numpy as np
 import rerun as rr
-from colors import _gamma_correction
+from colors import _gamma_correction, _white_balance
 from vision import _fix_perspective, _get_face_colors, _preprocess
 from webcolors import name_to_rgb
 
-camera_idx = int(argv[1]) if len(argv) > 1 else -1
-gamma = float(argv[2]) if len(argv) > 2 else 0.6
+if '-c' in argv:
+    camera_idx = int(argv[argv.index('-c') + 1])
+else:
+    camera_idx = -1
+if '-g' in argv:
+    gamma = float(argv[argv.index('-g') + 1])
+else:
+    gamma = 1.0
 
 print('Capturing from camera', camera_idx, 'with gamma correction', gamma)
 
@@ -22,6 +28,8 @@ while cap.isOpened():
     rr.log("image/rgb", rr.Image(frame))
     frame = _gamma_correction(frame, gamma=gamma)
     rr.log("image/corrected", rr.Image(frame))
+    # frame = _white_balance(frame)
+    # rr.log("image/balanced", rr.Image(frame))
 
     try:
         cropped, warped, M = _fix_perspective(frame, verbose=True)
