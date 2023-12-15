@@ -252,6 +252,25 @@ Mismo proceso que en el paso de busqueda del cubo
 # Si alguien tiene tiempo
 ![](images/robot.gif)
 
+---
+
+# Contenidos usados
+1. Procesamiento de imagenes
+2. Suavizado de imagenes
+3. Detección de características
+4. Segmentación y descripción de regiones
+5. Homografías
+6. Espacios de color
+
+---
+
+# Herramientas usadas
+1. `OpenCV`
+2. `Numpy`
+3. `Jupyter`
+4. `Rerun`
+5. `rubik-cube`
+6. `Marp`
 
 ---
 
