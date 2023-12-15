@@ -249,8 +249,18 @@ Mismo proceso que en el paso de busqueda del cubo
 
 ---
 
-# Si alguien tiene tiempo
+## Si alguien tiene tiempo
 ![](images/robot.gif)
+
+(esta hecho con **Lego**!)
+
+---
+
+# Conclusiones
+
+- Los contenidos del temario tienen aplicaciones reales
+- Se pueden hacer muchas cosas sin modelos de ML
+- El ruido es el enemigo
 
 ---
 
