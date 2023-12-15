@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import rerun as rr
 
 # Note, the ranges are dependent on the lighting conditions
 # red, orange and yellow can be very similar
@@ -8,8 +9,8 @@ HSV_RANGES = {
     "red": ((0, 100, 100), (8, 255, 255)),
     "orange": ((9, 60, 100), (28, 255, 255)),
     "yellow": ((29, 60, 100), (35, 255, 255)),
-    "green": ((36, 70, 100), (85, 255, 255)),
-    "blue": ((85, 100, 80), (135, 255, 255)),
+    "green": ((36, 70, 100), (82, 255, 255)),
+    "blue": ((94, 100, 80), (130, 255, 255)),
     "white": ((0, 0, 200), (255, 60, 255)),
 }
 
@@ -31,9 +32,14 @@ def _gamma_correction(channel: np.ndarray, gamma: float = 1.0) -> np.ndarray:
     return cv2.LUT(channel, table)
 
 
-def _get_hsv(rgb_image: np.ndarray) -> np.ndarray:
+def _get_hsv(rgb_image: np.ndarray, verbose: bool = False) -> np.ndarray:
     hsv = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2HSV)
     hsv[..., 0] = hsv[..., 0] % 170
+    if verbose:
+        h, s, v = cv2.split(hsv)
+        rr.log("h", rr.Image(h))
+        rr.log("s", rr.Image(s))
+        rr.log("v", rr.Image(v))
     return hsv
 
 

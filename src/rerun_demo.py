@@ -7,8 +7,10 @@ from colors import _gamma_correction
 from vision import _fix_perspective, _get_face_colors, _preprocess
 from webcolors import name_to_rgb
 
-camera_idx = int(argv[1]) if len(argv) > 1 else 0
+camera_idx = int(argv[1]) if len(argv) > 1 else -1
 gamma = float(argv[2]) if len(argv) > 2 else 0.6
+
+print('Capturing from camera', camera_idx, 'with gamma correction', gamma)
 
 cap = cv2.VideoCapture(camera_idx)
 
@@ -23,13 +25,12 @@ while cap.isOpened():
 
     try:
         cropped, warped, M = _fix_perspective(frame, verbose=True)
-        rr.log("cropped", rr.Image(cropped))
-        rr.log("warped", rr.Image(warped))
+        rr.log("face", rr.Image(cropped))
 
         colors, centers = _get_face_colors(cropped)
         for i, (center, color) in enumerate(zip(centers, colors.flatten())):
             rr.log(
-                f"cropped/cell/{i}",
+                f"face/cell/{i}",
                 rr.Boxes2D(
                     centers=[center],
                     sizes=[10, 10],
@@ -47,3 +48,5 @@ while cap.isOpened():
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
+
+cap.release()

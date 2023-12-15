@@ -28,17 +28,20 @@ def _load_image(path: pathlib.Path) -> np.ndarray:
 
 
 def _morph(stuff: np.ndarray, verbose: bool = False):
-    morph_sml = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, KERNEL_SML, iterations=2)
-    morph_med = cv2.morphologyEx(morph_sml, cv2.MORPH_CLOSE, KERNEL_MED, iterations=3)
-    morph_big = cv2.morphologyEx(morph_med, cv2.MORPH_OPEN, KERNEL_BIG, iterations=2)
+    eroded_sml = cv2.erode(stuff, KERNEL_SML, iterations=4)
+    eroded_med = cv2.erode(eroded_sml, KERNEL_MED, iterations=1)
+    eroded_big = cv2.erode(eroded_med, KERNEL_BIG, iterations=1)
+
+    filtered = cv2.boxFilter(eroded_big, -1, (7, 7), normalize=False)
+    dilated = cv2.dilate(filtered, KERNEL_MED, iterations=4)
+
+    closed = cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, KERNEL_MED, iterations=4)
 
     if verbose:
-        rr.log("image/morph/init", rr.SegmentationImage(stuff))
-        rr.log("image/morph/sml", rr.SegmentationImage(morph_sml))
-        rr.log("image/morph/med", rr.SegmentationImage(morph_med))
-        rr.log("image/morph/big", rr.SegmentationImage(morph_big))
+        rr.log("morph/stuff", rr.Image(stuff))
+        rr.log("morph/closed", rr.SegmentationImage(closed))
 
-    return morph_big
+    return closed
 
 
 def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
@@ -102,8 +105,8 @@ def _get_box(binarized: np.ndarray, verbose: bool = False):
 
 
 def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
-    segmented = _segment_cube(rgb_img, verbose=verbose)
-    contour, peri = _get_box(segmented, verbose=verbose)
+    mask = _segment_cube(rgb_img, verbose=verbose)
+    contour, peri = _get_box(mask, verbose=verbose)
 
     if contour is None:
         raise Exception("No contour found!")
@@ -115,9 +118,6 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     if peri < 240:
         raise Exception("Contour too small!")
 
-    if verbose:
-        rr.log("image/corners", rr.Points2D(positions=box, colors=(255, 0, 0), radii=6))
-
     cropped = perspective.four_point_transform(rgb_img, box)
 
     pts_dst = np.array(
@@ -125,7 +125,15 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     )
 
     M, _ = cv2.findHomography(box, pts_dst)
-    warped = cv2.warpPerspective(rgb_img, M, (WIDTH * 3, WIDTH * 3))
+    clone = rgb_img.copy()
+    # draw rect over clone
+    cv2.drawContours(clone, [box.astype("int")], -1, (0, 255, 0), 2)
+    warped = cv2.warpPerspective(clone, M, (WIDTH * 3, WIDTH * 3))
+
+    if verbose:
+        rr.log("image/corners", rr.Points2D(positions=box, colors=(255, 0, 0), radii=6, labels='face corner'))
+        rr.log("warped", rr.Image(warped))
+
     return cropped, warped, M
 
 
