@@ -11,7 +11,7 @@ KERNEL_SML = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 KERNEL_MED = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
 KERNEL_BIG = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
 
-WIDTH = 240
+WIDTH = 480
 
 
 def _preprocess(bgr_img: np.ndarray):

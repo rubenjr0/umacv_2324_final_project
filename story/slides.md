@@ -227,7 +227,7 @@ Mismo proceso que en el paso de busqueda del cubo
 
 ---
 
-# Muchas
+# Muchas gracias
 
 ---
 

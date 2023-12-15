@@ -4,19 +4,19 @@ from colors import COLOR_CODES, _gamma_correction
 from rubik.cube import Cube
 from rubik.solve import Solver
 from rubik.optimize import optimize_moves
-from vision import _fix_perspective, _get_face_colors, _preprocess
+from vision import _fix_perspective, _get_face_colors, _preprocess, WIDTH
 
 
 
 def _dialog(dst, txt, line: int = 1, is_warped: bool = False):
-    base = 240 if is_warped else 16
+    base = WIDTH if is_warped else 16
     cv2.putText(
         dst,
         txt,
         (base, base + 16 * (line - (2 if is_warped else 1))),
         cv2.FONT_HERSHEY_SIMPLEX,
-        3 if is_warped else 0.25,
-         (0, 255, 0) if is_warped else (0, 255, 255),
+        3 if is_warped else 0.5,
+         (0, 255, 0) if is_warped else (255, 255, 255),
         4 if is_warped else 1,
     )
 
@@ -80,7 +80,7 @@ while cap.isOpened():
         frame = cv2.warpPerspective(warped, M_inv, (frame.shape[1], frame.shape[0]))
 
     except Exception as _e:
-        # print(_e)
+        _dialog(frame, next_move, is_warped=False)
         pass
 
     if building_cube:
@@ -97,7 +97,7 @@ while cap.isOpened():
             _dialog(frame, f"Detected: {snapshot_face} face", line=2)
             _dialog(frame, "Hold 's' to save", line=3)
             for i in range(3):
-                _dialog(frame, str(snapshot[i, :]), line=6+i)
+                _dialog(frame, str(snapshot[i, :]), line=14+i)
 
         if cv2.waitKey(1) & 0xFF == ord("s") and snapshot is not None:
             # append list elements instead of list
