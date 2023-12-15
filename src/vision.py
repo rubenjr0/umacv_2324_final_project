@@ -89,7 +89,7 @@ def _get_box(binarized: np.ndarray, verbose: bool = False):
         rr.log("edges", rr.Image(edges))
     cnts = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
-    cnts = sorted(cnts, key=_squareness_error)
+    cnts = sorted(cnts, key=lambda c: cv2.contourArea(c) * _squareness_error(c))
 
     max_peri = -np.inf
     biggest = None
@@ -115,8 +115,8 @@ def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
     box = cv2.boxPoints(rect)
 
     # if the perimeter is too small the contour is probably noise
-    if peri < 240:
-        raise Exception("Contour too small!")
+    if peri < 250 or peri > 800:
+        raise Exception("Contour could be noise!")
 
     cropped = perspective.four_point_transform(rgb_img, box)
 

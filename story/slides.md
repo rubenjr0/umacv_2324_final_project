@@ -165,7 +165,10 @@ cv2.morphologyEx(img, cv2.MORPH_CLOSE, KERNEL, iterations=N)
 2. Detección de contornos
 3. Selección de contornos por área y compacidad
 
-$SquarenessError(s) =  K (\frac{1}{16}-Compactness(s))^2$
+<br>
+
+$SquarenessError(c) =  K (\frac{1}{16}-Compactness(c))^2$
+$SelectionScore(c) = Area(c) \times SquarenessError(c)$
 
 ---
 
@@ -187,7 +190,9 @@ $SquarenessError(s) =  K (\frac{1}{16}-Compactness(s))^2$
 
 ### ¿Por qué no solo una?
 
-Comodidad
+Comodidad:
+1. La primera es desechada tras extraer los colores
+2. La segunda necesita márgenes para ser reconstruida
 
 ---
 
