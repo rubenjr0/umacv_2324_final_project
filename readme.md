@@ -1,20 +1,13 @@
-# TODO:
-- Doc strings
-- Split code into different files
-- Solver module
+# Rubik's Cube Solver
 
-Mostrar next move superpuesto
+Check out the slides at `story/slides`.
 
-# Movements
+Install the dependencies:
 
-- U: Top
-- D: Bottom
-- R: Right
-- L: Left
-- F: Front
-- B: Back
-- M: Vertical slice (front)
-- E: Horizontal slice
-- S: Middle slice (side, left to right)
+```
+py -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-i: Counterclockwise
+Demos at `src/rerun_demo.py` and `src/main.py`.
