@@ -61,7 +61,7 @@ while cap.isOpened():
     frame = _gamma_correction(frame, gamma=1)
     try:
         cropped, warped, M = _fix_perspective(frame)
-        colors = _get_face_colors(cropped)
+        colors, _ = _get_face_colors(cropped)
 
         face_color = colors[1, 1]
 
@@ -126,17 +126,25 @@ while cap.isOpened():
         solver.solve()
         moves = solver.moves
         moves = optimize_moves(moves)
-        print('Optimized moves:', moves)
+        print('Optimized moves:')
+        for move in moves:
+            print(move)
+        with open('moves.txt', 'w') as f:
+            f.write('\n'.join(moves))
     elif manual_solve:
         next_move = moves[move_ptr]
         print('Next move:', next_move)
         _dialog(frame, "Press 'a' to go back, 'd' to go forward")
-        if cv2.waitKey(1) & 0xFF == ord("a"):
+        if t > 0:
+            t -= 1
+        if t == 0 and cv2.waitKey(1) & 0xFF == ord("a"):
             if move_ptr > 0:
                 move_ptr -= 1
-        elif cv2.waitKey(1) & 0xFF == ord("d"):
+                t = 45
+        elif t == 0 and cv2.waitKey(1) & 0xFF == ord("d"):
             if move_ptr < len(moves):
                 move_ptr += 1
+                t = 45
             else:
                 manual_solve = False
                 next_move = 'Solved!'

@@ -159,6 +159,14 @@ cv2.morphologyEx(img, cv2.MORPH_OPEN, KERNEL, iterations=N)
 cv2.morphologyEx(img, cv2.MORPH_CLOSE, KERNEL, iterations=N)
 ```
 
+--- 
+
+1. Detección de bordes (laplaciana)
+2. Detección de contornos
+3. Selección de contornos por área y compacidad
+
+$SquarenessError(s) =  K (\frac{1}{16}-Compactness(s))^2$
+
 ---
 
 ## Homografía
@@ -169,8 +177,11 @@ cv2.morphologyEx(img, cv2.MORPH_CLOSE, KERNEL, iterations=N)
 
 ---
 
+#### Corrección de perspectiva
+
 1. Recortar el cubo (extraccion de colores)
 2. Superponer información (AR)
+
 
 ---
 

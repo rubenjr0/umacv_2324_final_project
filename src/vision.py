@@ -3,6 +3,7 @@ import pathlib
 import cv2
 import imutils
 import numpy as np
+import rerun as rr
 from colors import HSV_RANGES, _classify_color, _get_hsv
 from imutils import perspective
 
@@ -26,20 +27,27 @@ def _load_image(path: pathlib.Path) -> np.ndarray:
     return img
 
 
-def _morph(stuff: np.ndarray):
+def _morph(stuff: np.ndarray, verbose: bool = False):
     morph_sml = cv2.morphologyEx(stuff, cv2.MORPH_OPEN, KERNEL_SML, iterations=2)
     morph_med = cv2.morphologyEx(morph_sml, cv2.MORPH_CLOSE, KERNEL_MED, iterations=3)
     morph_big = cv2.morphologyEx(morph_med, cv2.MORPH_OPEN, KERNEL_BIG, iterations=2)
+
+    if verbose:
+        rr.log("image/morph/init", rr.SegmentationImage(stuff))
+        rr.log("image/morph/sml", rr.SegmentationImage(morph_sml))
+        rr.log("image/morph/med", rr.SegmentationImage(morph_med))
+        rr.log("image/morph/big", rr.SegmentationImage(morph_big))
+
     return morph_big
 
 
-def _segment_cube(rgb_img: np.ndarray):
+def _segment_cube(rgb_img: np.ndarray, verbose: bool = False):
     hsv = _get_hsv(rgb_img)
     mask = np.zeros_like(hsv[:, :, 0])
     for color, (lower, upper) in HSV_RANGES.items():
         color_mask = cv2.inRange(hsv, lower, upper)
         mask |= color_mask
-    mask = _morph(mask)
+    mask = _morph(mask, verbose=verbose)
     return mask
 
 
@@ -72,8 +80,10 @@ def _squareness_error(contour: np.ndarray) -> float:
     return 1e6 * (1 / 16 - compactness) ** 2
 
 
-def _get_box(binarized: np.ndarray):
+def _get_box(binarized: np.ndarray, verbose: bool = False):
     edges = cv2.Laplacian(binarized, cv2.CV_8U, ksize=5)
+    if verbose:
+        rr.log("edges", rr.Image(edges))
     cnts = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
     cnts = sorted(cnts, key=_squareness_error)
@@ -91,9 +101,9 @@ def _get_box(binarized: np.ndarray):
     return biggest, max_peri
 
 
-def _fix_perspective(rgb_img: np.ndarray):
-    segmented = _segment_cube(rgb_img)
-    contour, peri = _get_box(segmented)
+def _fix_perspective(rgb_img: np.ndarray, verbose: bool = False):
+    segmented = _segment_cube(rgb_img, verbose=verbose)
+    contour, peri = _get_box(segmented, verbose=verbose)
 
     if contour is None:
         raise Exception("No contour found!")
@@ -105,10 +115,13 @@ def _fix_perspective(rgb_img: np.ndarray):
     if peri < 240:
         raise Exception("Contour too small!")
 
+    if verbose:
+        rr.log("image/corners", rr.Points2D(positions=box, colors=(255, 0,0), radii=6))
+
     cropped = perspective.four_point_transform(rgb_img, box)
 
     pts_dst = np.array(
-        [[WIDTH, WIDTH], [WIDTH * 2, WIDTH], [WIDTH*2, WIDTH * 2], [WIDTH, WIDTH * 2]]
+        [[WIDTH, WIDTH], [WIDTH * 2, WIDTH], [WIDTH * 2, WIDTH * 2], [WIDTH, WIDTH * 2]]
     )
 
     M, _ = cv2.findHomography(box, pts_dst)
@@ -141,4 +154,4 @@ def _get_face_colors(face: np.ndarray, verbose: bool = False) -> list[np.ndarray
     cells, centers = _get_cells(face, w_size=w_size)
     colors = [_classify_color(cell) for cell in cells]
     colors = np.array(colors).reshape(3, 3)
-    return colors
+    return colors, centers

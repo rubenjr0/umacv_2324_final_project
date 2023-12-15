@@ -17,8 +17,8 @@ BLUE   | -   | -B   | CB      |
 
 
 WHITE  : HSV    V
-GREEN  : LAB    A
-YELLOW : LAB    B
-BLUE   : LAB    -B
-ORANGE : LAB    B
 RED    : YCrCb  Cr
+YELLOW : LAB    B
+ORANGE : LAB    B
+GREEN  : LAB    A
+BLUE   : LAB    -B
